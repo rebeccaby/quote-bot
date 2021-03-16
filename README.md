@@ -14,7 +14,8 @@
 - [x] Add conditions to `$pause` and `$resume` to see if already paused/resumed
 
 ### Bugs:
-  * Quote Bot's responses triggered else cond in $q command
+  * ~~Quote Bot's responses triggers else condition in $q command~~
+    * Added check to see if bot ID is the same as the author ID
 
 ### Future:
   * Test-bot for testing all commands (change Petey-bot, maybe)
@@ -26,3 +27,4 @@
 
 ### Improbable:
   * `$q @user "quote"` -> manually-written quote by pinged user (possibly use `greedy`?)
+  * Website to show all quotes
