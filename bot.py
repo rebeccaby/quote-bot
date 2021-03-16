@@ -1,10 +1,14 @@
+import sys
 import discord
 from discord.ext import commands
+from discord.utils import get
 import pymongo
 from pymongo import MongoClient
+from youtube_dl import YoutubeDL
 import urllib.parse
-import time
-import datetime
+import logging
+
+logging.basicConfig(level=logging.INFO)
 
 # Establish client connection and choose command prefix
 client = commands.Bot(command_prefix="$")
@@ -25,23 +29,82 @@ collection = db["QuoteBot"]
 # Global constants
 MSG_LIMIT = 10
 
+songs = []
+
 # Connect event handler
 @client.event
 async def on_ready():
     print(f"{client.user} is now connected on Discord.")
 
+# Join command
+@client.command()
+async def join(ctx):
+    channel = None
+
+    if ctx.author.voice != None:
+        channel = ctx.author.voice.channel
+
+    if channel == None:
+        await ctx.channel.send(f"{ctx.author.id}, you're not connected to a voice channel!")
+    elif client.voice_clients:
+        await ctx.channel.send("Already connected to a voice channel!")
+    else:
+        await channel.connect()
+
+# Leave command
+@client.command()
+async def leave(ctx):
+    if not client.voice_clients:
+        await ctx.channel.send("Not connected to a voice channel!")
+    else:
+        await ctx.voice_client.disconnect()
+
+# Play command
+@client.command()
+async def play(ctx, url):
+
+    # put song urls in list? or separate command for queue
+
+    YDL_OPTIONS = {"format": "bestaudio", "noplaylist": "True"}
+    FFMPEG_OPTIONS = {"before_options": "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5", "options": "-vn"}
+    
+    voice = get(client.voice_clients, guild=ctx.guild)
+
+    if not voice.is_playing():
+        with YoutubeDL(YDL_OPTIONS) as ydl:
+            info = ydl.extract_info(url, download=False)
+        URL = info['formats'][0]['url']
+        voice.play(discord.FFmpegPCMAudio(URL, **FFMPEG_OPTIONS))
+        voice.is_playing()
+        await ctx.channel.send(f"Now playing: {info['title']}")
+    else:
+        await ctx.send("Already playing song.")
+
+# Pause command
+@client.command()
+async def pause(ctx):
+    pass
+
+# Stop command
+@client.command()
+async def stop(ctx):
+    pass
+
+# Destroy command
+@client.command()
+async def destroy(ctx):
+    await ctx.channel.send("Playlist destroyed.")
+
 # Quote command
 @client.command()
-async def quote(ctx, *args):
+async def q(ctx, *args): # *args so I can add 2-arg $q command later on
     await client.wait_until_ready()
-
-    #print("{} arguments: {}".format(len(args), ", ".join(args)))
 
     if len(args) > 2:
         await ctx.channel.send(f"<@{ctx.author.id}>, cannot process command!")
     else:
         if len(args) == 1:
-            # $quote <@user>
+            # $q <@user>
             if args[0][0:3] == "<@!" and args[0][-1] == ">":
                 user_id = int(args[0][3:-1])
                 has_messaged = False
@@ -50,6 +113,17 @@ async def quote(ctx, *args):
                         has_messaged = True
                         print(message.created_at.strftime("%m/%d/%y @ %H:%M:%S %p"))
                         print(f"\t[ {message.content} ]")
+                        
+                        post = {
+                            "author_id": message.author.id,
+                            "author_name": message.author.name,
+                            "time": message.created_at.time(),
+                            "date": message.created_at.date(),
+                            "quote": message.content,
+                            "saved_by": ctx.author.id
+                        }
+
+                        await ctx.channel.send(f"{message.content} - {message.author.name}")
                     elif message.author.id == user_id and has_messaged:
                         break
                     else:
@@ -57,7 +131,10 @@ async def quote(ctx, *args):
                 
                 #await ctx.channel.history(limit=20).find(lambda m : m.author.id == user_id)
 
-            '''elif args[0].startswith("https://discord.com/channels/") is True:
+            # $q 
+
+            '''
+            elif args[0].startswith("https://discord.com/channels/"):
                 message_link = args[0].split("/")
 
                 guild_id = int(message_link[4])
@@ -65,9 +142,10 @@ async def quote(ctx, *args):
                 message_id = int(message_link[5])
 
                 guild = client.get_guild(guild_id)
-                channel = guild.get_channel(channel_id) # NoneType for some reason
-                message = await channel.fetch_message(message_id) <- returns NoneType 
-                await ctx.channel.send(message)'''
+                channel = guild.get_channel(channel_id) # NoneType for some reason, related to on_ready()
+                message = await channel.fetch_message(message_id)
+                await ctx.channel.send(message)
+            '''
 
         else:
             await ctx.channel.send(f"<@{ctx.author.id}>, command received!")
@@ -75,6 +153,9 @@ async def quote(ctx, *args):
 # Message event handler
 @client.event
 async def on_message(ctx):
+    if ctx.author == client.user:
+        return
+
     print(f"#{ctx.channel}: {ctx.author}: {ctx.content}")
 
     # Coroutine - triggers registered commands

@@ -1,15 +1,25 @@
-# To-Do:
-- [ ] Create and store "quote" documents
-- [ ] ```$quote "quote"``` -> manually-written quote by author
-- [ ] ```$quote message-link``` -> linked message from user
-- [x] ```$quote @user``` -> last sent message from user
-- [ ] $help command
-- [ ] Have "title" field in each document
-- [ ] Scrollable embedded messages via emoting
+# Quote Bot
 
-# Future:
+### To-Do:
+- [ ] Design entity format (what is needed for the embedded messages)
+- [ ] Create and store "quote" documents
+- [ ] ```$q "quote"``` -> manually-written quote by author
+- [ ] ```$q message-link``` -> linked message from user
+- [x] ```$q @user``` -> last sent message from user
+- [ ] $help command
+- [ ] Scrollable embedded db documents via emoting
+- [ ] Some quote fetch feature
+- [x] Music bot, why not
+- [ ] Allow adding playlists to queue
+
+### Bugs:
+  * Quote Bot's responses triggered else cond in $q command
+
+### Future:
   * error-checking for (1) user has sent a message before (2) a user is pinged after $quote
   * scroll through embedded quote cards with emotes (like Mudae)
+  * have "title" field in each document?
+  * implement cogs
 
-# Improbable:
-  * ```$quote @user "quote"``` -> manually-written quote by pinged user (2 args)
+### Improbable:
+  * ```$q @user "quote"``` -> manually-written quote by pinged user (possibly use `greedy`
