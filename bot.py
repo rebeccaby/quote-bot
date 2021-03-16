@@ -1,4 +1,3 @@
-import sys
 import discord
 from discord.ext import commands
 from discord.utils import get
@@ -11,7 +10,7 @@ import logging
 logging.basicConfig(level=logging.INFO)
 
 # Establish client connection and choose command prefix
-client = commands.Bot(command_prefix="$")
+client = commands.Bot(command_prefix="$", help_command=None)
 
 # Separating sensitive information from src
 token = open("token.txt").read()
@@ -36,9 +35,17 @@ songs = []
 async def on_ready():
     print(f"{client.user} is now connected on Discord.")
 
+# Help command
+@client.command()
+async def help(ctx):
+    pass
+
 # Join command
 @client.command()
 async def join(ctx):
+
+    # maybe use is_connected() instead
+    
     channel = None
 
     if ctx.author.voice != None:
@@ -54,6 +61,9 @@ async def join(ctx):
 # Leave command
 @client.command()
 async def leave(ctx):
+
+    # maybe use is_connected() instead
+
     if not client.voice_clients:
         await ctx.channel.send("Not connected to a voice channel!")
     else:
@@ -62,8 +72,9 @@ async def leave(ctx):
 # Play command
 @client.command()
 async def play(ctx, url):
-
-    # put song urls in list? or separate command for queue
+    if not url.startswith("https://www.youtube.com/watch?v="):
+        await ctx.channel.send("Not a valid YouTube URL!")
+        return
 
     YDL_OPTIONS = {"format": "bestaudio", "noplaylist": "True"}
     FFMPEG_OPTIONS = {"before_options": "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5", "options": "-vn"}
@@ -75,24 +86,52 @@ async def play(ctx, url):
             info = ydl.extract_info(url, download=False)
         URL = info['formats'][0]['url']
         voice.play(discord.FFmpegPCMAudio(URL, **FFMPEG_OPTIONS))
-        voice.is_playing()
+        
         await ctx.channel.send(f"Now playing: {info['title']}")
     else:
-        await ctx.send("Already playing song.")
+        await ctx.channel.send("Already playing song.")
+    print(voice.source)
 
 # Pause command
 @client.command()
 async def pause(ctx):
-    pass
+    voice = get(client.voice_clients, guild=ctx.guild)
+    
+    if voice.is_playing():
+        voice.pause()
+    else:
+        if voice.is_paused():
+            await ctx.channel.send("Already paused.")
+        else:
+            await ctx.channel.send("Nothing is playing.")
+
+# Resume command
+@client.command()
+async def resume(ctx):
+    voice = get(client.voice_clients, guild=ctx.guild)
+
+    if voice.is_playing():
+        await ctx.channel.send("Song is playing.")
+    else:
+        if voice.is_paused():
+            voice.resume()
+        else:
+            await ctx.channel.send("Nothing is playing or paused.")
 
 # Stop command
 @client.command()
 async def stop(ctx):
-    pass
+    voice = get(client.voice_clients, guild=ctx.guild)
+    
+    voice.stop()
 
 # Destroy command
 @client.command()
 async def destroy(ctx):
+    voice = get(client.voice_clients, guild=ctx.guild)
+    if voice.is_playing():
+        voice.stop()
+    songs.clear()
     await ctx.channel.send("Playlist destroyed.")
 
 # Quote command
