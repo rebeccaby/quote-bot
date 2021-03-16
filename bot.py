@@ -28,7 +28,8 @@ collection = db["QuoteBot"]
 # Global constants
 MSG_LIMIT = 10
 
-songs = []
+# For holding song playlists when single-video URLs are passed
+songs_to_play = []
 
 # Connect event handler
 @client.event
@@ -61,9 +62,6 @@ async def join(ctx):
 # Leave command
 @client.command()
 async def leave(ctx):
-
-    # maybe use is_connected() instead
-
     if not client.voice_clients:
         await ctx.channel.send("Not connected to a voice channel!")
     else:
@@ -71,10 +69,13 @@ async def leave(ctx):
 
 # Play command
 @client.command()
-async def play(ctx, url):
-    if not url.startswith("https://www.youtube.com/watch?v="):
-        await ctx.channel.send("Not a valid YouTube URL!")
+async def play(ctx, yt_url):
+    if not yt_url.startswith("https://www.youtube.com/watch?v="):
+        await ctx.channel.send("Not a valid YouTube URL argument!")
         return
+
+    if not client.voice_clients:
+        await ctx.invoke(client.get_command("join"))
 
     YDL_OPTIONS = {"format": "bestaudio", "noplaylist": "True"}
     FFMPEG_OPTIONS = {"before_options": "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5", "options": "-vn"}
@@ -83,14 +84,13 @@ async def play(ctx, url):
 
     if not voice.is_playing():
         with YoutubeDL(YDL_OPTIONS) as ydl:
-            info = ydl.extract_info(url, download=False)
+            info = ydl.extract_info(yt_url, download=False)
         URL = info['formats'][0]['url']
         voice.play(discord.FFmpegPCMAudio(URL, **FFMPEG_OPTIONS))
         
         await ctx.channel.send(f"Now playing: {info['title']}")
     else:
         await ctx.channel.send("Already playing song.")
-    print(voice.source)
 
 # Pause command
 @client.command()
@@ -122,6 +122,8 @@ async def resume(ctx):
 @client.command()
 async def stop(ctx):
     voice = get(client.voice_clients, guild=ctx.guild)
+
+    #if not voice.is_playing() or voice.is_paused()
     
     voice.stop()
 
@@ -131,7 +133,7 @@ async def destroy(ctx):
     voice = get(client.voice_clients, guild=ctx.guild)
     if voice.is_playing():
         voice.stop()
-    songs.clear()
+    songs_to_play.clear()
     await ctx.channel.send("Playlist destroyed.")
 
 # Quote command
