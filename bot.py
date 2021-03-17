@@ -29,15 +29,20 @@ collection = db["QuoteBot"]
 MSG_LIMIT = 10
 song_queue = []
 
-def add_quote_to_db(ctx, message):
-    post = {
-        "_id": ctx.message.id,
-        "author_id": message.author.id,
-        "author_name": message.author.name,
-        "saved_by": ctx.author.id,
-        "quote": message.content
-    }
-    collection.insert_one(post)
+def add_quote_to_db(ctx, message) -> bool:
+    my_query = {"_id": ctx.message.id}
+    if (collection.count_documents(my_query) == 0):
+        post = {
+            "_id": ctx.message.id,
+            "author_id": message.author.id,
+            "author_name": message.author.name,
+            "saved_by": ctx.author.id,
+            "quote": message.content
+        }
+        collection.insert_one(post)
+        return True
+    else:
+        return False
 
 def play_next_in_queue(ctx, FFMPEG_OPTIONS):
     voice = get(client.voice_clients, guild=ctx.guild)
@@ -171,13 +176,11 @@ async def quote(ctx, arg=None):
             else:
                 if message.author.id == user_id and not has_messaged:
                     has_messaged = True
-                    my_query = {"_id": ctx.message.id}
-                    if (collection.count_documents(my_query) == 0):
-                        add_quote_to_db(ctx, message)
-                        await ctx.channel.send("Quote saved!")
+                    success = add_quote_to_db(ctx, message)
+                    if success:
+                        await ctx.channel.send("Quote saved.")
                     else:
-                        await ctx.channel.send("Quote already saved.")
-
+                        await ctx.channel.send("Quote already saved or saving was unsuccessful.")
                 elif message.author.id == user_id and has_messaged:
                     break
                 else:
@@ -188,7 +191,11 @@ async def quote(ctx, arg=None):
         message_link = arg.split("/")
         message_id = int(message_link[-1])
         message = await ctx.channel.fetch_message(message_id)
-        await ctx.channel.send(message.content)
+        success = add_quote_to_db(ctx, message)
+        if success:
+            await ctx.channel.send("Quote saved.")
+        else:
+            await ctx.channel.send("Quote already saved or saving was unsuccessful.")
 
     else:
         await ctx.channel.send(f"<@{ctx.author.id}>, cannot process command!")    

@@ -19,7 +19,7 @@
     * Added check to see if bot ID is the same as the author ID
   * ~~Check if `$quote @user` author is the same as `@user`~~
     * Doesn't matter, skipped last message in channel's history anyway
-  * `$quote arg` breaks if there's one quotation mark
+  * `$quote "quote"` breaks if there's a missing quotation mark
 
 ### Future:
   * Test-bot for testing all commands (change Petey-bot, maybe)
@@ -34,4 +34,4 @@
 
 ### Improbable:
   * `$quote @user "quote"` -> manually-written quote by pinged user (possibly use `greedy`?)
-  * Website to show all quotes
+  * Website to show all quotes (Flask?)
