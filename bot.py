@@ -25,11 +25,26 @@ cluster = MongoClient(mongo_url)
 db = cluster["QuoteBot"]
 collection = db["QuoteBot"]
 
-# Global constants
+# Global vars
 MSG_LIMIT = 10
-
-# For holding song playlists when single-video URLs are passed
 song_queue = []
+
+def add_quote_to_db(ctx, message):
+    post = {
+        "_id": ctx.message.id,
+        "author_id": message.author.id,
+        "author_name": message.author.name,
+        "saved_by": ctx.author.id,
+        "quote": message.content
+    }
+    collection.insert_one(post)
+
+def play_next_in_queue(ctx, FFMPEG_OPTIONS):
+    voice = get(client.voice_clients, guild=ctx.guild)
+    if len(song_queue) > 1:
+        del song_queue[0]
+        voice.play(discord.FFmpegPCMAudio(song_queue[0], **FFMPEG_OPTIONS), after=lambda e : play_next_in_queue(ctx, FFMPEG_OPTIONS))
+        voice.is_playing()
 
 # Connect event handler
 @client.event
@@ -88,18 +103,11 @@ async def play(ctx, yt_url):
         song_queue.append(info['formats'][0]['url'])
 
     if not voice.is_playing():
-        voice.play(discord.FFmpegPCMAudio(song_queue[0], **FFMPEG_OPTIONS), after=lambda e : play_next(ctx, FFMPEG_OPTIONS))
+        voice.play(discord.FFmpegPCMAudio(song_queue[0], **FFMPEG_OPTIONS), after=lambda e : play_next_in_queue(ctx, FFMPEG_OPTIONS))
         del song_queue[0]
         await ctx.channel.send(f"Now playing: {info['title']}")
     else:
         await ctx.channel.send("Added to queue.")
-
-def play_next(ctx, FFMPEG_OPTIONS):
-    voice = get(client.voice_clients, guild=ctx.guild)
-    if len(song_queue) > 1:
-        del song_queue[0]
-        voice.play(discord.FFmpegPCMAudio(song_queue[0], **FFMPEG_OPTIONS), after=lambda e : play_next(ctx, FFMPEG_OPTIONS))
-        voice.is_playing()
 
 # Pause command
 @client.command()
@@ -145,8 +153,12 @@ async def destroy(ctx):
 
 # Quote command
 @client.command()
-async def quote(ctx, arg):
+async def quote(ctx, arg=None):
     await client.wait_until_ready()
+
+    if arg is None:
+        await ctx.channel.send("No argument provided.")
+        return
 
     # $q @user
     if arg[0:3] == "<@!" and arg[-1] == ">":
@@ -161,15 +173,7 @@ async def quote(ctx, arg):
                     has_messaged = True
                     my_query = {"_id": ctx.message.id}
                     if (collection.count_documents(my_query) == 0):
-                        post = {
-                            "_id": ctx.message.id,
-                            "author_id": message.author.id,
-                            "author_name": message.author.name,
-                            "saved_by": ctx.author.id,
-                            "quote": message.content
-                        }
-                        collection.insert_one(post)
-                        print(f"{post['quote']}")
+                        add_quote_to_db(ctx, message)
                         await ctx.channel.send("Quote saved!")
                     else:
                         await ctx.channel.send("Quote already saved.")
@@ -180,16 +184,12 @@ async def quote(ctx, arg):
                     print("User hasn't sent any messages.")
 
     #  $q <message-link>
-    elif arg[0].startswith("https://discord.com/channels/"):
-        message_link = arg[0].split("/")
-        guild_id = int(message_link[4])
-        channel_id = int(message_link[6])
-        message_id = int(message_link[5])
-        guild = client.get_guild(guild_id)
-        channel = guild.get_channel(channel_id) # NoneType for some reason, related to on_ready()
-        message = await channel.fetch_message(message_id)
-        await ctx.channel.send(message)
-    
+    elif arg.startswith("https://discord.com/channels/"):
+        message_link = arg.split("/")
+        message_id = int(message_link[-1])
+        message = await ctx.channel.fetch_message(message_id)
+        await ctx.channel.send(message.content)
+
     else:
         await ctx.channel.send(f"<@{ctx.author.id}>, cannot process command!")    
         
@@ -207,7 +207,7 @@ async def on_message(ctx):
     if ctx.content == "\\(ouo":
         await ctx.channel.send("ouo)/")
 
-    # Coroutine - triggers registered commands
+    # Executes user commands
     await client.process_commands(ctx)
 
 client.run(token)
