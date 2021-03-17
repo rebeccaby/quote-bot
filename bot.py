@@ -10,7 +10,7 @@ import logging
 logging.basicConfig(level=logging.INFO)
 
 # Establish client connection and choose command prefix
-client = commands.Bot(command_prefix="$", help_command=None)
+client = commands.Bot(command_prefix='$', help_command=None)
 
 # Separating sensitive information from src
 token = open("token.txt").read()
@@ -29,7 +29,7 @@ collection = db["QuoteBot"]
 MSG_LIMIT = 10
 
 # For holding song playlists when single-video URLs are passed
-songs_to_play = []
+song_queue = []
 
 # Connect event handler
 @client.event
@@ -39,19 +39,15 @@ async def on_ready():
 # Help command
 @client.command()
 async def help(ctx):
-    pass
+    help_embed = discord.Embed(title="Quote Bot Help")
+    await ctx.channel.send(embed=help_embed)
 
 # Join command
 @client.command()
 async def join(ctx):
-
-    # maybe use is_connected() instead
-    
     channel = None
-
     if ctx.author.voice != None:
         channel = ctx.author.voice.channel
-
     if channel == None:
         await ctx.channel.send(f"{ctx.author.id}, you're not connected to a voice channel!")
     elif client.voice_clients:
@@ -77,26 +73,38 @@ async def play(ctx, yt_url):
     if not client.voice_clients:
         await ctx.invoke(client.get_command("join"))
 
-    YDL_OPTIONS = {"format": "bestaudio", "noplaylist": "True"}
-    FFMPEG_OPTIONS = {"before_options": "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5", "options": "-vn"}
+    YDL_OPTIONS = {
+        "format": "bestaudio",
+        "noplaylist": "True"
+    }
+    FFMPEG_OPTIONS = {
+        "before_options": "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5",
+        "options": "-vn"
+    }
     
     voice = get(client.voice_clients, guild=ctx.guild)
+    with YoutubeDL(YDL_OPTIONS) as ydl:
+        info = ydl.extract_info(yt_url, download=False)
+        song_queue.append(info['formats'][0]['url'])
 
     if not voice.is_playing():
-        with YoutubeDL(YDL_OPTIONS) as ydl:
-            info = ydl.extract_info(yt_url, download=False)
-        URL = info['formats'][0]['url']
-        voice.play(discord.FFmpegPCMAudio(URL, **FFMPEG_OPTIONS))
-        
+        voice.play(discord.FFmpegPCMAudio(song_queue[0], **FFMPEG_OPTIONS), after=lambda e : play_next(ctx, FFMPEG_OPTIONS))
+        del song_queue[0]
         await ctx.channel.send(f"Now playing: {info['title']}")
     else:
-        await ctx.channel.send("Already playing song.")
+        await ctx.channel.send("Added to queue.")
+
+def play_next(ctx, FFMPEG_OPTIONS):
+    voice = get(client.voice_clients, guild=ctx.guild)
+    if len(song_queue) > 1:
+        del song_queue[0]
+        voice.play(discord.FFmpegPCMAudio(song_queue[0], **FFMPEG_OPTIONS), after=lambda e : play_next(ctx, FFMPEG_OPTIONS))
+        voice.is_playing()
 
 # Pause command
 @client.command()
 async def pause(ctx):
     voice = get(client.voice_clients, guild=ctx.guild)
-    
     if voice.is_playing():
         voice.pause()
     else:
@@ -109,7 +117,6 @@ async def pause(ctx):
 @client.command()
 async def resume(ctx):
     voice = get(client.voice_clients, guild=ctx.guild)
-
     if voice.is_playing():
         await ctx.channel.send("Song is playing.")
     else:
@@ -122,10 +129,10 @@ async def resume(ctx):
 @client.command()
 async def stop(ctx):
     voice = get(client.voice_clients, guild=ctx.guild)
-
-    #if not voice.is_playing() or voice.is_paused()
-    
-    voice.stop()
+    if voice.is_playing() or voice.is_paused():
+        voice.stop()
+    else:
+        await ctx.channel.send("Nothing is playing or paused.")
 
 # Destroy command
 @client.command()
@@ -133,71 +140,72 @@ async def destroy(ctx):
     voice = get(client.voice_clients, guild=ctx.guild)
     if voice.is_playing():
         voice.stop()
-    songs_to_play.clear()
+    song_queue.clear()
     await ctx.channel.send("Playlist destroyed.")
 
 # Quote command
 @client.command()
-async def q(ctx, *args): # *args so I can add 2-arg $q command later on
+async def quote(ctx, arg):
     await client.wait_until_ready()
 
-    if len(args) > 2:
-        await ctx.channel.send(f"<@{ctx.author.id}>, cannot process command!")
-    else:
-        if len(args) == 1:
-            # $q <@user>
-            if args[0][0:3] == "<@!" and args[0][-1] == ">":
-                user_id = int(args[0][3:-1])
-                has_messaged = False
-                async for message in ctx.channel.history(limit=MSG_LIMIT):
-                    if message.author.id == user_id and not has_messaged:
-                        has_messaged = True
-                        print(message.created_at.strftime("%m/%d/%y @ %H:%M:%S %p"))
-                        print(f"\t[ {message.content} ]")
-                        
+    # $q @user
+    if arg[0:3] == "<@!" and arg[-1] == ">":
+        user_id = int(arg[3:-1])
+        has_messaged = False
+        async for message in ctx.channel.history(limit=MSG_LIMIT):
+            last_message = await ctx.channel.fetch_message(ctx.channel.last_message_id)
+            if message == last_message:
+                continue
+            else:
+                if message.author.id == user_id and not has_messaged:
+                    has_messaged = True
+                    my_query = {"_id": ctx.message.id}
+                    if (collection.count_documents(my_query) == 0):
                         post = {
+                            "_id": ctx.message.id,
                             "author_id": message.author.id,
                             "author_name": message.author.name,
-                            "time": message.created_at.time(),
-                            "date": message.created_at.date(),
-                            "quote": message.content,
-                            "saved_by": ctx.author.id
+                            "saved_by": ctx.author.id,
+                            "quote": message.content
                         }
-
-                        await ctx.channel.send(f"{message.content} - {message.author.name}")
-                    elif message.author.id == user_id and has_messaged:
-                        break
+                        collection.insert_one(post)
+                        print(f"{post['quote']}")
+                        await ctx.channel.send("Quote saved!")
                     else:
-                        print("User hasn't sent any messages.")
-                
-                #await ctx.channel.history(limit=20).find(lambda m : m.author.id == user_id)
+                        await ctx.channel.send("Quote already saved.")
 
-            # $q 
+                elif message.author.id == user_id and has_messaged:
+                    break
+                else:
+                    print("User hasn't sent any messages.")
 
-            '''
-            elif args[0].startswith("https://discord.com/channels/"):
-                message_link = args[0].split("/")
-
-                guild_id = int(message_link[4])
-                channel_id = int(message_link[6])
-                message_id = int(message_link[5])
-
-                guild = client.get_guild(guild_id)
-                channel = guild.get_channel(channel_id) # NoneType for some reason, related to on_ready()
-                message = await channel.fetch_message(message_id)
-                await ctx.channel.send(message)
-            '''
-
-        else:
-            await ctx.channel.send(f"<@{ctx.author.id}>, command received!")
-
+    #  $q <message-link>
+    elif arg[0].startswith("https://discord.com/channels/"):
+        message_link = arg[0].split("/")
+        guild_id = int(message_link[4])
+        channel_id = int(message_link[6])
+        message_id = int(message_link[5])
+        guild = client.get_guild(guild_id)
+        channel = guild.get_channel(channel_id) # NoneType for some reason, related to on_ready()
+        message = await channel.fetch_message(message_id)
+        await ctx.channel.send(message)
+    
+    else:
+        await ctx.channel.send(f"<@{ctx.author.id}>, cannot process command!")    
+        
 # Message event handler
 @client.event
 async def on_message(ctx):
+    #print(ctx.created_at.strftime("%m/%d/%y @ %H:%M:%S%p "), end="")
+    print(f"#{ctx.channel} => {ctx.author}: {ctx.content}")
+
     if ctx.author == client.user:
         return
 
-    print(f"#{ctx.channel}: {ctx.author}: {ctx.content}")
+    if ctx.content == "ouo)/":
+        await ctx.channel.send("\\(ouo")
+    if ctx.content == "\\(ouo":
+        await ctx.channel.send("ouo)/")
 
     # Coroutine - triggers registered commands
     await client.process_commands(ctx)
