@@ -213,9 +213,10 @@ async def view(ctx, arg):
     def check(reaction, user):
         accept = reaction.message.id == ctx.channel.last_message_id
         return accept and user == ctx.author and (str(reaction.emoji == "👉") or str(reaction.emoji == "👈"))
+    
     if arg[0:3] == "<@!" and arg[-1] == ">":
         # List of quotes to scroll through
-        user_quotes_embeds = []
+        user_quote_embeds = []
 
         pinged_user_id = int(arg[3:-1])
         
@@ -224,26 +225,39 @@ async def view(ctx, arg):
         user_quotes = user['quotes']
         
         for quote in user_quotes:
-            embed = discord.Embed(title="Quote")
-            embed.add_field(value=quote, name=user['author_name'], inline=False)
-            user_quotes_embeds.append(embed)
+            embed = discord.Embed(title=user['author_name'])
+            embed.add_field(name=quote, value="page num", inline=False)
+            user_quote_embeds.append(embed)
 
         # TODO: Format embed and send
-        # TODO: Add left and right reactions to the embed
-        # TODO: Keep listening to reactions the entire duration, even if reacted to
 
-        await ctx.channel.send(embed=user_quotes_embeds[0])
+        i = 0
+        num_of_quote_embeds = len(user_quote_embeds)
+        await ctx.channel.send(embed=user_quote_embeds[i])
+        await asyncio.sleep(1)
+        async for message in ctx.channel.history(limit=10):
+            if message.author.bot is True:
+                bot_quote_embed = message
+                break
+
+        await bot_quote_embed.add_reaction("👈")
+        await bot_quote_embed.add_reaction("👉")
 
         while True:
             try:
                 reaction, user = await client.wait_for('reaction_add', timeout=5.0, check=check)
-                
-                print("User has reacted. Restarting timer.")
+                print("User has reacted.")
                 
                 if reaction.emoji == "👈":
-                    print("User wants to scroll left.")
+                    await bot_quote_embed.remove_reaction("👈", user)
+                    i = (i-1) % num_of_quote_embeds
+                    await bot_quote_embed.edit(embed=user_quote_embeds[i])
+                    print(f"Scrolling left. i is now {i}")
                 if reaction.emoji == "👉":
-                    print("User wants to scroll right.")
+                    await bot_quote_embed.remove_reaction("👉", user)
+                    i = (i-1) % num_of_quote_embeds
+                    await bot_quote_embed.edit(embed=user_quote_embeds[i])
+                    print(f"Scrolling right. i is now {i}")
 
             except asyncio.TimeoutError:
                 await ctx.channel.send("Time is out.")

@@ -8,7 +8,7 @@ Simple Discord bot to store, fetch, and display user quotes.
 - [x] `$quote message-link` -> linked message from user
 - [x] `$quote @user` -> last sent message from user
 - [ ] $help command
-- [ ] Scrollable embedded db documents via emoting
+- [x] Scrollable embedded db documents via emoting
 - [x] Some quote fetch feature
 - [x] Music bot, why not
 - [x] Allow adding songs to queue
