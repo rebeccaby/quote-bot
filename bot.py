@@ -186,6 +186,10 @@ async def quote(ctx, arg=None):
             else:
                 if message.author.id == user_id and not has_messaged:
                     has_messaged = True
+                    '''
+                    quote_confirmation = await ctx.channel.send("Save this quote?")
+                    quote_confirmation.add_reaction("✅")
+                    '''
                     if add_quote_to_db(ctx, message):
                         await ctx.channel.send("Quote saved.")
                     else:
@@ -210,58 +214,64 @@ async def quote(ctx, arg=None):
 
 @client.command()
 async def view(ctx, arg):
+    # Check that user reacted to right message
     def check(reaction, user):
         return reaction.message.id == ctx.channel.last_message_id and user == ctx.author and (str(reaction.emoji == "👉") or str(reaction.emoji == "👈"))
     
     if arg[0:3] == "<@!" and arg[-1] == ">":
-        # List of quotes to scroll through
-        user_quote_embeds = []
-
         pinged_user_id = int(arg[3:-1])
         
+        # Fetching user's quotes from db
         find_query = { "_id": pinged_user_id }
         user_collection = collection.find_one(find_query)
         user_quotes = user_collection['quotes']
         num_of_quotes = len(user_quotes)
 
+        # Getting user's pfp
+        user_id = await client.fetch_user(user_collection['_id'])
+        user_avatar_url = user_id.avatar_url
+
+        # Prepping embed to show quotes
         embed = discord.Embed(title=user_collection['author_name'])
         embed.add_field(name="Quote", value=user_quotes[0], inline=False)
-        embed.set_footer(text=f"1/{num_of_quotes}")
-
-        # TODO: Format embed and send
-
-        i = 0
+        embed.set_footer(text=f"Quote 1/{num_of_quotes}", icon_url=user_avatar_url)
         
+        # Send and save embed to focus on it
         await ctx.channel.send(embed=embed)
         await asyncio.sleep(0.5)
         async for message in ctx.channel.history(limit=10):
             if message.author.bot is True:
-                bot_quote_embed = message
+                bot_quote_embed_message = message
                 break
 
-        await bot_quote_embed.add_reaction("👈")
-        await bot_quote_embed.add_reaction("👉")
+        # "Buttons" for scrolling
+        await bot_quote_embed_message.add_reaction("👈")
+        await bot_quote_embed_message.add_reaction("👉")
+
+        i = 0
 
         while True:
             try:
-                reaction, user = await client.wait_for('reaction_add', timeout=5.0, check=check)
+                reaction, user = await client.wait_for('reaction_add', timeout=15.0, check=check)
                 
+                # Scroll left
                 if reaction.emoji == "👈":
-                    await bot_quote_embed.remove_reaction("👈", user)
+                    await bot_quote_embed_message.remove_reaction("👈", user)
                     i = (i-1) % num_of_quotes
-                    embed.set_footer(text=f"{i+1}/{num_of_quotes}")
                     embed.set_field_at(index=0, name="Quote", value=user_quotes[i], inline=False)
-                    await bot_quote_embed.edit(embed=embed)
+                    embed.set_footer(text=f"Quote {i+1}/{num_of_quotes}", icon_url=user_avatar_url)
+                    await bot_quote_embed_message.edit(embed=embed)
 
+                # Scroll right
                 if reaction.emoji == "👉":
-                    await bot_quote_embed.remove_reaction("👉", user)
+                    await bot_quote_embed_message.remove_reaction("👉", user)
                     i = (i+1) % num_of_quotes
-                    embed.set_footer(text=f"{i+1}/{num_of_quotes}")
                     embed.set_field_at(index=0, name="Quote", value=user_quotes[i], inline=False)
-                    await bot_quote_embed.edit(embed=embed)
+                    embed.set_footer(text=f"Quote {i+1}/{num_of_quotes}", icon_url=user_avatar_url)
+                    await bot_quote_embed_message.edit(embed=embed)
 
+            # Stop responding to reactions
             except asyncio.TimeoutError:
-                await ctx.channel.send("Time is out.")
                 break
     else:
         await ctx.channel.send("Must ping a valid user.")
@@ -272,13 +282,20 @@ async def on_message(ctx):
     if ctx.author == client.user:
         return
 
+    # Console-logging all messages
     print(ctx.created_at.strftime("%m/%d/%y @ %H:%M:%S%p "), end="")
     print(f"#{ctx.channel} => {ctx.author}: {ctx.content}")
 
+    # Tim
     if ctx.content == "ouo)/":
         await ctx.channel.send(r"\\(ouo")
     if ctx.content == r"\\(ouo":
         await ctx.channel.send("ouo)/")
+
+    # Kryzl
+    awam = "awam"
+    if awam in ctx.content:
+        await ctx.channel.send("Please respond...")
 
     # Executes user commands
     await client.process_commands(ctx)
