@@ -8,7 +8,7 @@
 - [x] `$quote @user` -> last sent message from user
 - [ ] $help command
 - [ ] Scrollable embedded db documents via emoting
-- [ ] Some quote fetch feature
+- [x] Some quote fetch feature
 - [x] Music bot, why not
 - [x] Allow adding songs to queue
 - [x] Add conditions to `$pause` and `$resume` to see if already paused/resumed
@@ -31,6 +31,7 @@
   * Utilize env vars instead of txt
   * Deploy (AWS?)
   * Use reactions for quote commands ⛔ ✅ for confirmation
+  * 👈 👉
 
 ### Improbable:
   * `$quote @user "quote"` -> manually-written quote by pinged user (possibly use `greedy`?)

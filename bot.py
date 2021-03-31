@@ -6,11 +6,12 @@ from pymongo import MongoClient
 from youtube_dl import YoutubeDL
 import urllib.parse
 import logging
+import asyncio
 
 logging.basicConfig(level=logging.INFO)
 
 # Establish client connection and choose command prefix
-client = commands.Bot(command_prefix='$', help_command=None)
+client = commands.Bot(command_prefix='!', help_command=None, max_messages=20)
 
 # Separating sensitive information from src
 token = open("token.txt").read()
@@ -30,19 +31,23 @@ MSG_LIMIT = 10
 song_queue = []
 
 def add_quote_to_db(ctx, message) -> bool:
-    my_query = {"_id": ctx.message.id}
+    my_query = { "_id": message.author.id }
+
+    # User isn't in db
     if (collection.count_documents(my_query) == 0):
         post = {
-            "_id": ctx.message.id,
-            "author_id": message.author.id,
+            "_id": message.author.id,
             "author_name": message.author.name,
             "saved_by": ctx.author.id,
-            "quote": message.content
+            "quotes": [message.content]
         }
         collection.insert_one(post)
         return True
+    # User is already in db
     else:
-        return False
+        collection.update_one(my_query, {"$push": {"quotes": message.content}})
+        return True
+    return False
 
 def play_next_in_queue(ctx, FFMPEG_OPTIONS):
     voice = get(client.voice_clients, guild=ctx.guild)
@@ -56,34 +61,39 @@ def play_next_in_queue(ctx, FFMPEG_OPTIONS):
 async def on_ready():
     print(f"{client.user} is now connected on Discord.")
 
-# Help command
+# Help command - display information about commands/syntax
 @client.command()
 async def help(ctx):
     help_embed = discord.Embed(title="Quote Bot Help")
     await ctx.channel.send(embed=help_embed)
 
-# Join command
+# Join command - bot joins a voice channel
 @client.command()
 async def join(ctx):
     channel = None
-    if ctx.author.voice != None:
+    if ctx.author.voice is not None:
         channel = ctx.author.voice.channel
-    if channel == None:
+    if channel is None:
+        print(f">>> Failed; {ctx.author.name} not in a VC.")
         await ctx.channel.send(f"{ctx.author.id}, you're not connected to a voice channel!")
     elif client.voice_clients:
+        print(f">>> Failed; already in {client.voice_clients[0].channel.name}.")
         await ctx.channel.send("Already connected to a voice channel!")
     else:
+        print(f">>> Joining {ctx.author.name}'s VC - {channel.name}")
         await channel.connect()
 
-# Leave command
+# Leave command - bot leaves a voice channel
 @client.command()
 async def leave(ctx):
     if not client.voice_clients:
+        print(f">>> No VC connections.")
         await ctx.channel.send("Not connected to a voice channel!")
     else:
+        print(f">>> Leaving VC - {client.voice_clients[0].channel.name}")
         await ctx.voice_client.disconnect()
 
-# Play command
+# Play command - bot plays a youtube video in voice channel
 @client.command()
 async def play(ctx, yt_url):
     if not yt_url.startswith("https://www.youtube.com/watch?v="):
@@ -114,7 +124,7 @@ async def play(ctx, yt_url):
     else:
         await ctx.channel.send("Added to queue.")
 
-# Pause command
+# Pause command - bot pauses the playing video
 @client.command()
 async def pause(ctx):
     voice = get(client.voice_clients, guild=ctx.guild)
@@ -126,7 +136,7 @@ async def pause(ctx):
         else:
             await ctx.channel.send("Nothing is playing.")
 
-# Resume command
+# Resume command - bot resumes the playing video
 @client.command()
 async def resume(ctx):
     voice = get(client.voice_clients, guild=ctx.guild)
@@ -138,7 +148,7 @@ async def resume(ctx):
         else:
             await ctx.channel.send("Nothing is playing or paused.")
 
-# Stop command
+# Stop command - bot stops playing anything
 @client.command()
 async def stop(ctx):
     voice = get(client.voice_clients, guild=ctx.guild)
@@ -147,7 +157,7 @@ async def stop(ctx):
     else:
         await ctx.channel.send("Nothing is playing or paused.")
 
-# Destroy command
+# Destroy command - delete bot's video playlist
 @client.command()
 async def destroy(ctx):
     voice = get(client.voice_clients, guild=ctx.guild)
@@ -156,7 +166,7 @@ async def destroy(ctx):
     song_queue.clear()
     await ctx.channel.send("Playlist destroyed.")
 
-# Quote command
+# Quote command - bot stores a user's quote
 @client.command()
 async def quote(ctx, arg=None):
     await client.wait_until_ready()
@@ -176,8 +186,7 @@ async def quote(ctx, arg=None):
             else:
                 if message.author.id == user_id and not has_messaged:
                     has_messaged = True
-                    success = add_quote_to_db(ctx, message)
-                    if success:
+                    if add_quote_to_db(ctx, message):
                         await ctx.channel.send("Quote saved.")
                     else:
                         await ctx.channel.send("Quote already saved or saving was unsuccessful.")
@@ -191,27 +200,69 @@ async def quote(ctx, arg=None):
         message_link = arg.split("/")
         message_id = int(message_link[-1])
         message = await ctx.channel.fetch_message(message_id)
-        success = add_quote_to_db(ctx, message)
-        if success:
+        if add_quote_to_db(ctx, message):
             await ctx.channel.send("Quote saved.")
         else:
             await ctx.channel.send("Quote already saved or saving was unsuccessful.")
 
     else:
-        await ctx.channel.send(f"<@{ctx.author.id}>, cannot process command!")    
+        await ctx.channel.send(f"<@{ctx.author.id}>, cannot process command!")
+
+@client.command()
+async def view(ctx, arg):
+    def check(reaction, user):
+        accept = reaction.message.id == ctx.channel.last_message_id
+        return accept and user == ctx.author and (str(reaction.emoji == "👉") or str(reaction.emoji == "👈"))
+    if arg[0:3] == "<@!" and arg[-1] == ">":
+        # List of quotes to scroll through
+        user_quotes_embeds = []
+
+        pinged_user_id = int(arg[3:-1])
+        
+        find_query = { "_id": pinged_user_id }
+        user = collection.find_one(find_query)
+        user_quotes = user['quotes']
+        
+        for quote in user_quotes:
+            embed = discord.Embed(title="Quote")
+            embed.add_field(value=quote, name=user['author_name'], inline=False)
+            user_quotes_embeds.append(embed)
+
+        # TODO: Format embed and send
+        # TODO: Add left and right reactions to the embed
+        # TODO: Keep listening to reactions the entire duration, even if reacted to
+
+        await ctx.channel.send(embed=user_quotes_embeds[0])
+
+        while True:
+            try:
+                reaction, user = await client.wait_for('reaction_add', timeout=5.0, check=check)
+                
+                print("User has reacted. Restarting timer.")
+                
+                if reaction.emoji == "👈":
+                    print("User wants to scroll left.")
+                if reaction.emoji == "👉":
+                    print("User wants to scroll right.")
+
+            except asyncio.TimeoutError:
+                await ctx.channel.send("Time is out.")
+                break
+    else:
+        await ctx.channel.send("Must ping a valid user.")
         
 # Message event handler
 @client.event
 async def on_message(ctx):
-    #print(ctx.created_at.strftime("%m/%d/%y @ %H:%M:%S%p "), end="")
-    print(f"#{ctx.channel} => {ctx.author}: {ctx.content}")
-
     if ctx.author == client.user:
         return
 
+    print(ctx.created_at.strftime("%m/%d/%y @ %H:%M:%S%p "), end="")
+    print(f"#{ctx.channel} => {ctx.author}: {ctx.content}")
+
     if ctx.content == "ouo)/":
-        await ctx.channel.send("\\(ouo")
-    if ctx.content == "\\(ouo":
+        await ctx.channel.send(r"\\(ouo")
+    if ctx.content == r"\\(ouo":
         await ctx.channel.send("ouo)/")
 
     # Executes user commands
