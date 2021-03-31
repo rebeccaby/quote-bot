@@ -13,7 +13,7 @@ logging.basicConfig(level=logging.INFO)
 # Establish client connection and choose command prefix
 client = commands.Bot(command_prefix='!', help_command=None, max_messages=20)
 
-# Separating sensitive information from src
+# Keeping token, credentials out of src
 token = open("token.txt").read()
 with open("cred.txt") as file:
     lines = [line.strip() for line in file]
@@ -211,8 +211,7 @@ async def quote(ctx, arg=None):
 @client.command()
 async def view(ctx, arg):
     def check(reaction, user):
-        accept = reaction.message.id == ctx.channel.last_message_id
-        return accept and user == ctx.author and (str(reaction.emoji == "👉") or str(reaction.emoji == "👈"))
+        return reaction.message.id == ctx.channel.last_message_id and user == ctx.author and (str(reaction.emoji == "👉") or str(reaction.emoji == "👈"))
     
     if arg[0:3] == "<@!" and arg[-1] == ">":
         # List of quotes to scroll through
@@ -221,20 +220,20 @@ async def view(ctx, arg):
         pinged_user_id = int(arg[3:-1])
         
         find_query = { "_id": pinged_user_id }
-        user = collection.find_one(find_query)
-        user_quotes = user['quotes']
-        
-        for quote in user_quotes:
-            embed = discord.Embed(title=user['author_name'])
-            embed.add_field(name=quote, value="page num", inline=False)
-            user_quote_embeds.append(embed)
+        user_collection = collection.find_one(find_query)
+        user_quotes = user_collection['quotes']
+        num_of_quotes = len(user_quotes)
+
+        embed = discord.Embed(title=user_collection['author_name'])
+        embed.add_field(name="Quote", value=user_quotes[0], inline=False)
+        embed.set_footer(text=f"1/{num_of_quotes}")
 
         # TODO: Format embed and send
 
         i = 0
-        num_of_quote_embeds = len(user_quote_embeds)
-        await ctx.channel.send(embed=user_quote_embeds[i])
-        await asyncio.sleep(1)
+        
+        await ctx.channel.send(embed=embed)
+        await asyncio.sleep(0.5)
         async for message in ctx.channel.history(limit=10):
             if message.author.bot is True:
                 bot_quote_embed = message
@@ -246,18 +245,20 @@ async def view(ctx, arg):
         while True:
             try:
                 reaction, user = await client.wait_for('reaction_add', timeout=5.0, check=check)
-                print("User has reacted.")
                 
                 if reaction.emoji == "👈":
                     await bot_quote_embed.remove_reaction("👈", user)
-                    i = (i-1) % num_of_quote_embeds
-                    await bot_quote_embed.edit(embed=user_quote_embeds[i])
-                    print(f"Scrolling left. i is now {i}")
+                    i = (i-1) % num_of_quotes
+                    embed.set_footer(text=f"{i+1}/{num_of_quotes}")
+                    embed.set_field_at(index=0, name="Quote", value=user_quotes[i], inline=False)
+                    await bot_quote_embed.edit(embed=embed)
+
                 if reaction.emoji == "👉":
                     await bot_quote_embed.remove_reaction("👉", user)
-                    i = (i-1) % num_of_quote_embeds
-                    await bot_quote_embed.edit(embed=user_quote_embeds[i])
-                    print(f"Scrolling right. i is now {i}")
+                    i = (i+1) % num_of_quotes
+                    embed.set_footer(text=f"{i+1}/{num_of_quotes}")
+                    embed.set_field_at(index=0, name="Quote", value=user_quotes[i], inline=False)
+                    await bot_quote_embed.edit(embed=embed)
 
             except asyncio.TimeoutError:
                 await ctx.channel.send("Time is out.")
