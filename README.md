@@ -1,4 +1,5 @@
 # Quote Bot
+Simple Discord bot to store, fetch, and display user quotes.
 
 ### To-Do:
 - [ ] Design entity format (what is needed for the embedded messages)
