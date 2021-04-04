@@ -62,30 +62,44 @@ async def on_ready():
 @client.command()
 async def help(ctx):
     def check(reaction, user):
-        return help_message == reaction.message and user == ctx.author and (str(reaction.emoji) == "👈" or str(reaction.emoji) == "👉")
+        return help_embed_message == reaction.message and user == ctx.author and (str(reaction.emoji) == "👈" or str(reaction.emoji) == "👉")
     
     help_embed = discord.Embed(title="Quote Bot Help")
 
     help_embed_list = []
 
-    # Quote commands
-    help_embed.add_field(name="!quote", value= "!quote @user\n!quote <message-link>\nSaves a user's quote.", inline=False)
-    help_embed.add_field(name="!view", value="!view @user\nDisplays all of a user's quotes.", inline=False)
-    help_embed.set_thumbnail(url=client.user.avatar_url)
-    help_embed_list.append(help_embed)
+    # Keeping one embed, removing and adding new fields, and appending to list didn't work
 
-    '''
+    # Quote commands
+    quote_help_embed = discord.Embed(title="Quote Bot Help", description="Commands for quoting.")
+    quote_help_embed.add_field(name="!quote", value= "!quote @user\n!quote <message-link>\nSaves a user's quote.", inline=False)
+    quote_help_embed.add_field(name="!view", value="!view @user\nDisplays all of a user's quotes.", inline=False)
+    help_embed_list.append(quote_help_embed)
+
+    # Voice Channel commands
+    vc_help_embed = discord.Embed(title="Quote Bot Help", description="Commands for voice channel interaction.")
+    vc_help_embed.add_field(name="!join", value="Joins the same voice channel as the author's.", inline=False)
+    vc_help_embed.add_field(name="!leave", value="Leaves the voice channel, if in one.", inline=False)
+    help_embed_list.append(vc_help_embed)
+
     # Music commands
-    help_embed.set_field_at()
-    help_embed_list.append(help_embed)
-    '''
-    
+    music_help_embed = discord.Embed(title="Quote Bot Help", description="Commands for music.")
+    music_help_embed.add_field(name="!play", value="!play <youtube-link>\nPlays the linked song, or queues it if another song is playing.", inline=False)
+    music_help_embed.add_field(name="!pause", value="Pauses the current song, if playing.", inline=False)
+    music_help_embed.add_field(name="!resume", value="Resumes the current song, if paused.", inline=False)
+    music_help_embed.add_field(name="!stop", value="Stops playing the current song.", inline=False)
+    music_help_embed.add_field(name="!destroy", value="Stops playing the current song, and destroys the song queue.", inline=False)
+    help_embed_list.append(music_help_embed)
+
+    for embed in help_embed_list:
+        embed.set_thumbnail(url=client.user.avatar_url)
+        # put author icon url here
+
     help_embed_message = await ctx.channel.send(embed=help_embed_list[0])
 
-    help_embed_message.add_reaction("👈")
-    help_embed_message.add_reaction("👉")
+    await help_embed_message.add_reaction("👈")
+    await help_embed_message.add_reaction("👉")
 
-    '''
     i = 0
 
     while True:
@@ -95,20 +109,19 @@ async def help(ctx):
             scroll = False
 
             if reaction.emoji == "👈":
-                await help_embed_message.remove_reaction("👈")
+                await help_embed_message.remove_reaction("👈", user)
                 i = (i-1) % len(help_embed_list)
                 scroll = True
             if reaction.emoji == "👉":
-                await help_embed_message.remove_reaction("👉")
+                await help_embed_message.remove_reaction("👉", user)
                 i = (i+1) % len(help_embed_list)
                 scroll = True
 
             if scroll is True:
-                await help_embed_message.edit(embed=help_embed[i])
+                await help_embed_message.edit(embed=help_embed_list[i])
 
         except asyncio.TimeoutError:
             break
-    '''
 
 # Join command - bot joins a voice channel
 @client.command()
