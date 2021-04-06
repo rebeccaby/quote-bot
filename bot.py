@@ -68,7 +68,7 @@ async def help(ctx):
 
     help_embed_list = []
 
-    # Keeping one embed, removing and adding new fields, and appending to list didn't work
+    # Keeping one embed, removing and adding new fields, and appending to list didn't work.
 
     # Quote commands
     quote_help_embed = discord.Embed(title="Quote Bot Help", description="Commands for quoting.")
@@ -354,7 +354,7 @@ async def on_message(ctx):
         return
 
     # Console-logging all messages
-    print(ctx.created_at.strftime("%m/%d/%y @ %H:%M:%S%p "), end="")
+    print(ctx.created_at.strftime("[%m/%d/%y @ %H:%M:%S%p] "), end="")
     print(f"#{ctx.channel} => {ctx.author}: {ctx.content}")
 
     # \(ouo)/

@@ -2,12 +2,12 @@
 Simple Discord bot to store, fetch, and display user quotes.
 
 ### To-Do:
-- [ ] Design entity format (what is needed for the embedded messages)
+- [x] Design entity format (what is needed for the embedded messages)
 - [x] Create and store "quote" documents
 - [ ] `$quote "quote"` -> manually-written quote by author
 - [x] `$quote message-link` -> linked message from user
 - [x] `$quote @user` -> last sent message from user
-- [ ] $help command
+- [x] $help command
 - [x] Scrollable embedded db documents via emoting
 - [x] Some quote fetch feature
 - [x] Music bot, why not
@@ -30,9 +30,10 @@ Simple Discord bot to store, fetch, and display user quotes.
   * Implement cogs
   * Separate command for adding video playlist
   * Utilize env vars instead of txt
-  * Deploy (AWS?)
-  * Use reactions for quote commands ⛔ ✅ for confirmation
-  * 👈 👉
+  * ~~Deploy (AWS?)~~
+  * ~~Use reactions for quote commands ⛔ ✅ for confirmation~~
+  * ~~Use 👈 👉 for scrolling
+  * Use `mention` instead of using user id directly
 
 ### Improbable:
   * `$quote @user "quote"` -> manually-written quote by pinged user (possibly use `greedy`?)
